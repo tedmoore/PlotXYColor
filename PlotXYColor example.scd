@@ -11,25 +11,27 @@
 
 (
 //plot
+
+// pass in the normalized data and a call back function for anytime the mouse hovers over a point
 PlotXYColor(~normed_data,{
-	arg i;
+	arg i; // by default, the call back is passed the index of the data point
 	i.postln;
-	~data[i].postln;
+	~data[i].postln; // use that index to look up the unnormalized vector and post it
 });
 )
 
 // ============================== add headers so that the dropdowns have labels
 (
-~column_labels = ~n_dims.collect({
+~column_labels = ~n_dims.collect({ // make an array of labels for the columns, this would likely be the names of the analysis features
 	arg i;
 	"Ted's Feature %".format(i);
 });
 
-PlotXYColor(~normed_data,{
+PlotXYColor(~normed_data,{ // pass in the same stuff, but also...
 	arg i;
 	i.postln;
 	~data[i].postln;
-},~column_labels);
+},~column_labels); // pass in as the third argument that array of column labels
 )
 
 // ============================== add labels to the data points
@@ -49,7 +51,7 @@ PlotXYColor(~normed_data,{
 	vector[1] > 0;
 });
 
-// how many points did we end up keeping? (started with 1000)
+// how many points did we end up keeping? (started with 1000) should be about 500
 "kept % points".format(~data.size).postln;
 
 // pull off that first column so we can have the ids as an array
@@ -68,7 +70,7 @@ PlotXYColor(~normed_data,{
 PlotXYColor(~normed_data,{
 	arg id;
 	id.postln;
-},idArray:~point_labels);
+},idArray:~point_labels); // pass in as the 4th argument the array of data point labels
 )
 
 // ======================================
@@ -91,9 +93,9 @@ s.waitForBoot({
 		FluidBufNoveltySlice.process(s,buf,indices:indices,feature:1,threshold:0.55,action:{
 			indices.loadToFloatArray(action:{
 				arg novelties;
-				var n_slices = novelties.size - 1;
+				var n_slices = novelties.size - 1; // how many slices there actually are
 				//var n_slices = 2;
-				var data = Array.newClear(n_slices);
+				var data = Array.newClear(n_slices); // this will end up being the master data set
 				var headers, normedData;
 				n_slices.do({
 					arg i;
@@ -106,7 +108,7 @@ s.waitForBoot({
 								arg sts;
 								i.postln;
 
-								sts = sts.clump(7);
+								sts = sts.clump(7); // clump all the means together, all the std devs together, etc.
 
 								/*
 								each row is a param of stats analysis
@@ -128,7 +130,7 @@ s.waitForBoot({
 								[6] crest
 								*/
 
-								data[i] = sts[0]; // just look at the means for now
+								data[i] = sts[0]; // just look at the means for now, add to data set
 								s.sync;
 								stats.free;
 							});
@@ -144,9 +146,11 @@ s.waitForBoot({
 				defer{
 					PlotXYColor(normedData,{
 						arg hoverIndex, x, y, xindex, yindex;
+						// use index that is passed back to find what frame in the buffer this slice starts at
 						var startFrame = novelties[hoverIndex];
+						// how long is this slice in seconds--for playback
 						var dur_sec = (novelties[hoverIndex + 1] - startFrame) / s.sampleRate;
-						"index:\t\t%".format(hoverIndex).postln;
+						"index:\t\t%".format(hoverIndex).postln; // post a bunch of stuff
 						data[hoverIndex].do({
 							arg val, hi;
 							var extra_tab = "";
@@ -157,6 +161,7 @@ s.waitForBoot({
 						"point:\t\t% , %".format(x.round(0.01),y.round(0.01)).postln;
 						"indices:\t% , %".format(xindex,yindex).postln;
 						"".postln;
+						// playback that slice
 						{
 							var sig = PlayBuf.ar(1,buf,1,0,startPos:startFrame);
 							sig = sig * EnvGen.kr(Env([0,1,1,0],[0.03,dur_sec-0.06,0.03]),doneAction:2);
