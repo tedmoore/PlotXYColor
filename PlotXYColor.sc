@@ -3,6 +3,8 @@ Ted Moore
 www.tedmooremusic.com
 ted@tedmooremusic.com
 June 4, 2020
+
+demo video: https://drive.google.com/file/d/18L7nxhboE3gpEIeuF1etUfJhQ-7uI23u/view?usp=sharing
 */
 
 PlotXYColor {
@@ -12,6 +14,7 @@ PlotXYColor {
 	circleRadius = 6, // how big the dots are
 	corpus, // the data that is passed in, but not that data that get's used in the course of things, that's prCorpus
 	corpus_dims,
+	connector_lines,
 	colorArray,
 	disp_colors,
 	headerArray, // array of strings that user can pass for column headers (OPTIONAL)
@@ -28,13 +31,14 @@ PlotXYColor {
 	slewTime = 0.5; // how long it takes for the dots to move between different spots in the plot
 
 	*new {
-		arg corpus, mouseOverFunc, headerArray /* optional */, idArray /* optional */, colorArray /* optional */, slewTime = 0.5, ignorePrevious = true;
-		^super.new.init(corpus,mouseOverFunc,headerArray,idArray,colorArray,slewTime,ignorePrevious);
+		arg corpus, mouseOverFunc, headerArray /* optional */, idArray /* optional */, colorArray /* optional */, connector_lines /* optional */, slewTime = 0.5, ignorePrevious = true;
+		^super.new.init(corpus,mouseOverFunc,headerArray,idArray,colorArray,connector_lines,slewTime,ignorePrevious);
 	}
 
 	init {
-		arg corpus_, mouseOverFunc_, headerArray_, idArray_, colorArray_, slewTime_, ignorePrevious_;
+		arg corpus_, mouseOverFunc_, headerArray_, idArray_, colorArray_, connector_lines_, slewTime_, ignorePrevious_;
 		colorArray = colorArray_;
+		connector_lines = connector_lines_;
 		corpus = corpus_;
 		corpus_dims = corpus[0].size;
 
@@ -113,6 +117,21 @@ PlotXYColor {
 		.drawFunc_({ // this is the "draw loop" for a supercollider view - its actually only called though when it needs to be updated
 			// i.e. it's not actually looping. this runs everytime plotView.refresh is called.
 
+			if(connector_lines.notNil,{
+				//Pen.color_(Color.black);
+				Pen.strokeColor = Color.black;
+				connector_lines.do({
+					arg pts;
+					var pt1 = prCorpus[pts[0]].dispRect.center;
+					var pt2 = prCorpus[pts[1]].dispRect.center;
+					pts.postln;
+					pt1.postln;
+					pt2.postln;
+					Pen.line(pt1,pt2);
+					Pen.stroke;
+				});
+			});
+
 			prCorpus.do({ // go through the entire private corpus and put a dot on the screen for each
 				arg corpusItem, i;
 				Pen.addOval(corpusItem.dispRect);
@@ -168,6 +187,12 @@ PlotXYColor {
 
 		// show the window
 		plotWin.front;
+	}
+
+	setConnectorLines {
+		arg cl_arr;
+		connector_lines = cl_arr;
+		plotView.refresh;
 	}
 
 	getrxry { // pass in an x, y point from the screen (in pixels measurements) and get returned the normalized x, y (0 to 1)

@@ -1,4 +1,5 @@
 // ============================= basic example
+// demo video: https://drive.google.com/file/d/18L7nxhboE3gpEIeuF1etUfJhQ-7uI23u/view?usp=sharing
 
 (
 // data is in 25 dimensions
