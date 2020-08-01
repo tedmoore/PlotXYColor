@@ -28,7 +28,10 @@ PlotXYColor {
 	plotView, // the subview where everything is plotted
 	plotWin, // the window
 	prCorpus, // a private array of objects that handles the corpus data
-	slewTime = 0.5; // how long it takes for the dots to move between different spots in the plot
+	slewTime = 0.5, // how long it takes for the dots to move between different spots in the plot
+	filter_index_nb,
+	filter_operator_but,
+	filter_value_nb;
 
 	*new {
 		arg corpus, mouseOverFunc, headerArray /* optional */, idArray /* optional */, colorArray /* optional */, connector_lines /* optional */, slewTime = 0.5, ignorePrevious = true;
@@ -113,39 +116,65 @@ PlotXYColor {
 			pum; // return the menu to be part of the axisPums array
 		});
 
+		filter_index_nb = EZNumber(container,Rect(0,0,150,20),"Filter Index: ",ControlSpec(0,axisOptions.size-1,step:1),{
+			arg nb;
+			plotView.refresh;
+		},0,false,120,30);
+
+		filter_operator_but = Button(container,Rect(0,0,20,20))
+		.states_([[" "],["="],["<"],[">"]])
+		.action_({
+			arg but;
+			plotView.refresh;
+		});
+
+		filter_value_nb = EZNumber(container,Rect(0,0,100,20),"Value: ",nil.asSpec,{plotView.refresh;});
+
 		plotView = UserView(plotWin,Rect(0,20,plotWin.view.bounds.width,plotWin.view.bounds.height-20))
 		.drawFunc_({ // this is the "draw loop" for a supercollider view - its actually only called though when it needs to be updated
 			// i.e. it's not actually looping. this runs everytime plotView.refresh is called.
 
+			prCorpus.do({ // go through the entire private corpus and put a dot on the screen for each
+				arg corpusItem, i;
+				var draw = this.filterCheck(corpusItem);
+
+				if(draw,{
+					Pen.addOval(corpusItem.dispRect);
+					if(colorArray.isNil,{
+						if(corpus_dims > 2,{
+							Pen.color_(Color.hsv(corpusItem.color,1,1));
+						},{
+							Pen.color_(Color.black);
+						});
+					},{
+						Pen.color_(colorArray[i]);
+					});
+					Pen.draw;
+				});
+
+			});
+
 			if(connector_lines.notNil,{
 				//Pen.color_(Color.black);
-				Pen.strokeColor = Color.black;
+				//
 				connector_lines.do({
 					arg pts;
 					var pt1 = prCorpus[pts[0]].dispRect.center;
 					var pt2 = prCorpus[pts[1]].dispRect.center;
-					pts.postln;
+					if(pts.size == 3,{
+						Pen.strokeColor_(pts[2]);
+					},{
+						Pen.strokeColor = Color.black;
+					});
+					/*					pts.postln;
 					pt1.postln;
-					pt2.postln;
+					pt2.postln;*/
 					Pen.line(pt1,pt2);
 					Pen.stroke;
 				});
 			});
 
-			prCorpus.do({ // go through the entire private corpus and put a dot on the screen for each
-				arg corpusItem, i;
-				Pen.addOval(corpusItem.dispRect);
-				if(colorArray.isNil,{
-					if(corpus_dims > 2,{
-						Pen.color_(Color.hsv(corpusItem.color,1,1));
-					},{
-						Pen.color_(Color.black);
-					});
-				},{
-					Pen.color_(colorArray[i]);
-				});
-				Pen.draw;
-			});
+
 		})
 		.mouseOverAction_({ // this function gets called each time the mouse moves over the window
 			arg view, px, py, modifiers;
@@ -153,10 +182,11 @@ PlotXYColor {
 			prCorpus.do({ // go through the whole corpus...
 				arg corpusItem, i;
 
-				if(corpusItem.dispRect.notNil,{
-
-					if(corpusItem.dispRect.contains(mousePoint),{ // if the mouse is inside this datapoint's dot...
-						this.returnIndex(i,px,py); // return the index
+				if(this.filterCheck(corpusItem),{
+					if(corpusItem.dispRect.notNil,{
+						if(corpusItem.dispRect.contains(mousePoint),{ // if the mouse is inside this datapoint's dot...
+							this.returnIndex(i,px,py); // return the index
+						});
 					});
 				});
 			});
@@ -192,7 +222,28 @@ PlotXYColor {
 	setConnectorLines {
 		arg cl_arr;
 		connector_lines = cl_arr;
-		plotView.refresh;
+		defer{plotView.refresh};
+	}
+
+	filterCheck {
+		arg corpus_item;
+		var draw = true;
+		if(filter_operator_but.value != 0,{
+			var filter_index = filter_index_nb.value;
+			var filter_value = filter_value_nb.value;
+			filter_operator_but.value.switch(
+				1,{
+					draw = corpus_item.vector[filter_index] == filter_value;
+				},
+				2,{
+					draw = corpus_item.vector[filter_index] < filter_value;
+				},
+				3,{
+					draw = corpus_item.vector[filter_index] > filter_value;
+				}
+			);
+		});
+		^draw;
 	}
 
 	getrxry { // pass in an x, y point from the screen (in pixels measurements) and get returned the normalized x, y (0 to 1)
@@ -216,17 +267,20 @@ PlotXYColor {
 			# xindex, yindex, colorindex = this.getCurrentIndices; // what are the current vector indicies that are being displayed
 
 			// if the user passed in an idArray, don't pass the data point's index, pass the data point's id from that idArray
-			if(idArray.notNil,{idx = idArray[idx]});
+			if(idArray.notNil,{
+				var id = idArray[idx];
+				mouseOverFunc.value(id, idx,rx,ry,xindex,yindex);
+			},{
 
-			/* evaluate the function the user passed. pass to that function:
-			(0) the index (or id) of the point that was hovered over
-			(1) the normalized x position of the mouse
-			(2) the normalized y position of the mouse
-			(3) the current vector index (i.e., feature) that is displayed on the x axis
-			(4) the current vector index (i.e., feature) that is displayed on the y axis
-			*/
-			mouseOverFunc.value(idx,rx,ry,xindex,yindex);
-
+				/* evaluate the function the user passed. pass to that function:
+				(0) the index (or id) of the point that was hovered over
+				(1) the normalized x position of the mouse
+				(2) the normalized y position of the mouse
+				(3) the current vector index (i.e., feature) that is displayed on the x axis
+				(4) the current vector index (i.e., feature) that is displayed on the y axis
+				*/
+				mouseOverFunc.value(idx,rx,ry,xindex,yindex);
+			});
 		});
 	}
 
@@ -238,13 +292,18 @@ PlotXYColor {
 		var winner = nil;
 		prCorpus.do({
 			arg corpusItem, i;
-			var dist = corpusItem.dispRect.origin.dist(mousePt);
-			if(dist < record_dist,{
-				record_dist = dist;
-				winner = i;
+			if(this.filterCheck(corpusItem),{
+				var dist = corpusItem.dispRect.origin.dist(mousePt);
+				if(dist < record_dist,{
+					record_dist = dist;
+					winner = i;
+				});
 			});
 		});
-		this.returnIndex(winner,x,y);
+
+		if(winner.notNil,{
+			this.returnIndex(winner,x,y);
+		});
 	}
 
 	getCurrentIndices {
