@@ -31,19 +31,54 @@ PlotXYColor {
 	slewTime = 0.5, // how long it takes for the dots to move between different spots in the plot
 	filter_index_nb,
 	filter_operator_but,
-	filter_value_nb;
+	filter_value_nb,
+	justReturnNormXY,
+	>blackDot = nil;
 
 	*new {
-		arg corpus, mouseOverFunc, headerArray /* optional */, idArray /* optional */, colorArray /* optional */, connector_lines /* optional */, slewTime = 0.5, ignorePrevious = true;
-		^super.new.init(corpus,mouseOverFunc,headerArray,idArray,colorArray,connector_lines,slewTime,ignorePrevious);
+		arg corpus, mouseOverFunc, headerArray /* optional */, idArray /* optional */, colorArray /* optional */, connector_lines /* optional */, slewTime = 0.5, ignorePrevious = true, justReturnNormXY = false;
+		^super.new.init(corpus,mouseOverFunc,headerArray,idArray,colorArray,connector_lines,slewTime,ignorePrevious,justReturnNormXY);
 	}
 
+	/**fromFluidDataSet {
+	arg ds, mouseOverFunc, headerArray, colorArray, connector_lines, slewTime = 0.5, ignorePrevious = true, action;
+	Routine{
+	var norm = FluidNormalize(ds.server);
+	var norm_ds = FluidDataSet(ds.server);
+
+	ds.server.sync;
+
+	norm.fitTransform(ds,norm_ds,{
+	norm_ds.dump({
+	arg dict;
+	var data = List.new, ids = List.new;
+
+	dict.at("data").keysValuesDo({
+	arg key, val;
+	ids.add(key);
+	data.add(val);
+	});
+
+	data = data.asArray;
+	ids = ids.asArray;
+
+	defer{
+	action.value(
+	PlotXYColor(data,mouseOverFunc,headerArray,ids,colorArray,connector_lines,slewTime, ignorePrevious)
+	);
+	};
+	});
+	});
+	}.play;
+	}*/
+
 	init {
-		arg corpus_, mouseOverFunc_, headerArray_, idArray_, colorArray_, connector_lines_, slewTime_, ignorePrevious_;
+		arg corpus_, mouseOverFunc_, headerArray_, idArray_, colorArray_, connector_lines_, slewTime_, ignorePrevious_, justReturnNormXY_ = false;
 		colorArray = colorArray_;
 		connector_lines = connector_lines_;
 		corpus = corpus_;
 		corpus_dims = corpus[0].size;
+		justReturnNormXY = justReturnNormXY_;
 
 		if(corpus_dims < 2,{
 			"Corpus must be at least 2 dimensions".throw;
@@ -174,18 +209,25 @@ PlotXYColor {
 				});
 			});
 
+			if(blackDot.notNil,{
+				Pen.addOval(blackDot);
+				Pen.color_(Color.black);
+				Pen.draw;
+			});
 
 		})
 		.mouseOverAction_({ // this function gets called each time the mouse moves over the window
 			arg view, px, py, modifiers;
-			var mousePoint = Point(px,py);
-			prCorpus.do({ // go through the whole corpus...
-				arg corpusItem, i;
+			if(justReturnNormXY.not,{
+				var mousePoint = Point(px,py);
+				prCorpus.do({ // go through the whole corpus...
+					arg corpusItem, i;
 
-				if(this.filterCheck(corpusItem),{
-					if(corpusItem.dispRect.notNil,{
-						if(corpusItem.dispRect.contains(mousePoint),{ // if the mouse is inside this datapoint's dot...
-							this.returnIndex(i,px,py); // return the index
+					if(this.filterCheck(corpusItem),{
+						if(corpusItem.dispRect.notNil,{
+							if(corpusItem.dispRect.contains(mousePoint),{ // if the mouse is inside this datapoint's dot...
+								this.returnIndex(i,px,py); // return the index
+							});
 						});
 					});
 				});
@@ -194,7 +236,14 @@ PlotXYColor {
 		.mouseMoveAction_({ // if the mouse button is down and the mouse moves over the window this function is called
 			arg view, x, y, modifiers;
 			//["mouse move",view, x, y, modifiers].postln;
-			this.findClosest(x,y); // find the closest point...
+			if(justReturnNormXY.not,{
+				this.findClosest(x,y); // find the closest point...
+			},{
+				var nx, ny;
+				# nx, ny = this.getrxry(x,y);
+				blackDot = Rect(x,y,circleRadius,circleRadius);
+				mouseOverFunc.(nx,ny);
+			});
 		});
 
 		// =============== before we display the window and start using, make the private corpus =============
@@ -282,6 +331,15 @@ PlotXYColor {
 				mouseOverFunc.value(idx,rx,ry,xindex,yindex);
 			});
 		});
+	}
+
+	valueActionXY {
+		arg x, y, normalized = true;
+		if(normalized,{
+			x = x.linlin(0,1,0,plotView.bounds.width);
+			y = y.linlin(0,1,plotView.bounds.height,0);
+		});
+		this.findClosest(x,y);
 	}
 
 	findClosest {
