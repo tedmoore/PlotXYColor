@@ -40,37 +40,60 @@ PlotXYColor {
 		^super.new.init(corpus,mouseOverFunc,headerArray,idArray,colorArray,connector_lines,slewTime,ignorePrevious,justReturnNormXY);
 	}
 
-	/**fromFluidDataSet {
-	arg ds, mouseOverFunc, headerArray, colorArray, connector_lines, slewTime = 0.5, ignorePrevious = true, action;
-	Routine{
-	var norm = FluidNormalize(ds.server);
-	var norm_ds = FluidDataSet(ds.server);
+	*makeColorArray {
+		arg idsArray, labelSet, action;
 
-	ds.server.sync;
+		labelSet.dump{
+			arg labelsDict;
 
-	norm.fitTransform(ds,norm_ds,{
-	norm_ds.dump({
-	arg dict;
-	var data = List.new, ids = List.new;
+			var colorArray = Array.newClear(idsArray.size);
+			var catColors = Pseq(FluidViewer.createCatColors).asStream;
+			var colorTrackerDict = Dictionary.new;
 
-	dict.at("data").keysValuesDo({
-	arg key, val;
-	ids.add(key);
-	data.add(val);
-	});
+			idsArray.do{
+				arg id, i;
+				var label = labelsDict["data"][id];
+				colorTrackerDict[label] = colorTrackerDict[label] ? catColors.next;
+				colorArray[i] = colorTrackerDict[label];
+			};
 
-	data = data.asArray;
-	ids = ids.asArray;
+			colorTrackerDict.dopostln;
 
-	defer{
-	action.value(
-	PlotXYColor(data,mouseOverFunc,headerArray,ids,colorArray,connector_lines,slewTime, ignorePrevious)
-	);
-	};
-	});
-	});
-	}.play;
-	}*/
+			action.(colorArray);
+		};
+	}
+
+	*fromFluidDataSet {
+		arg ds, labelSet, mouseOverFunc, headerArray, connector_lines, slewTime = 0.5, ignorePrevious = true, action;
+		var norm_ds = FluidDataSet(ds.server);
+
+		FluidNormalize(ds.server).fitTransform(ds,norm_ds);
+
+
+		norm_ds.dump{
+			arg dict;
+			var data = Array.newClear(dict["data"].size), ids = Array.newClear(dict["data"].size);
+
+			dict["data"].keysValuesDo{
+				arg key, val, i;
+				ids[i] = key;
+				data[i] = val;
+			};
+
+			if(labelSet.notNil){
+				this.makeColorArray(ids,labelSet,{
+					arg colorArray;
+					defer{
+						PlotXYColor(data,mouseOverFunc,headerArray,ids,colorArray,connector_lines,slewTime, ignorePrevious);
+					}
+				});
+			}{
+				defer{
+					PlotXYColor(data,mouseOverFunc,headerArray,ids,nil,connector_lines,slewTime, ignorePrevious)
+				}
+			}
+		};
+	}
 
 	init {
 		arg corpus_, mouseOverFunc_, headerArray_, idArray_, colorArray_, connector_lines_, slewTime_, ignorePrevious_, justReturnNormXY_ = false;
